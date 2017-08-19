@@ -1,5 +1,5 @@
 import dbus
-from hci import Adapter1DBus
+from adapter import Adapter1DBus
 
 
 bus = dbus.SystemBus()
