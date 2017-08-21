@@ -17,17 +17,33 @@
 
 from gi.repository import GLib
 import pydbus
+import re
 
 BLUEZ_NAME = 'org.bluez'
 SYSTEM_BUS = pydbus.SystemBus()
+loop = GLib.MainLoop()
 
 
 class Adapter (object):
     __bluez_root = SYSTEM_BUS.get(BLUEZ_NAME, '/')
 
-    def __init__(self, hci_address):
+    def __init__(self, hci_address, search_address=False):
         self._adapter_obj = self._find_adapter(hci_address)
         self.powered = True
+        if search_address is True:
+            self.__bluez_root.InterfacesAdded = self._search_for_device_address
+        else:
+            self.__bluez_root.InterfacesAdded = self._search_for_device_name
+        return
+
+    def start_discovery(self):
+        return
+
+    def _search_for_device_address(self, dev_address):
+        return
+
+    def _search_for_device_name(self, dev_name):
+        return
 
     @property
     def uuids(self):
@@ -110,10 +126,11 @@ class Adapter (object):
     @classmethod
     def _find_adapter(cls, hci_address):
         result = None
+        hci_regex = re.compile(r'.*(hci)\d$')
 
         obj_dict = cls.__bluez_root.GetManagedObjects()
         # Filter only object paths with 'hci'
-        hci_dict = {key: val for (key, val) in obj_dict.items() if 'hci' in key}
+        hci_dict = {key: val for (key, val) in obj_dict.items() if hci_regex.match(key)}
         for path, hci in hci_dict.items():
             if hci['org.bluez.Adapter1']['Address'] == hci_address:
                 result = SYSTEM_BUS.get(BLUEZ_NAME, path)
@@ -125,4 +142,6 @@ class Adapter (object):
 
 if __name__ == '__main__':
     hci0 = Adapter('5C:F3:70:81:D3:6C')
+    hci0.powered = True
+    hci0.start_discovery()
     print(hci0.powered)
