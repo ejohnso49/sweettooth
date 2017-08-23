@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-from gi.repository import GLib
+from gi.repository import GLib, GObject
 import pydbus
 import re
 
@@ -23,27 +23,40 @@ BLUEZ_NAME = 'org.bluez'
 SYSTEM_BUS = pydbus.SystemBus()
 loop = GLib.MainLoop()
 
-
 class Adapter (object):
     __bluez_root = SYSTEM_BUS.get(BLUEZ_NAME, '/')
 
-    def __init__(self, hci_address, search_address=False):
+    def __init__(self, hci_address, search_key, search_address=False):
         self._adapter_obj = self._find_adapter(hci_address)
         self.powered = True
+        self._search_key = search_key
         if search_address is True:
-            self.__bluez_root.InterfacesAdded = self._search_for_device_address
+            self.__bluez_root.OnInterfacesAdded = self._search_for_device_address
+            # self.__bluez_root.OnPropertiesChanged = self._search_for_device_address
         else:
-            self.__bluez_root.InterfacesAdded = self._search_for_device_name
+            self.__bluez_root.OnInterfacesAdded = self._search_for_device_name
+            # self.__bluez_root.OnPropertiesChanged = self._search_for_device_name
         return
 
     def start_discovery(self):
+        self._adapter_obj.StartDiscovery()
         return
 
-    def _search_for_device_address(self, dev_address):
+    def stop_discovery(self):
+        self._adapter_obj.StopDiscovery()
         return
 
-    def _search_for_device_name(self, dev_name):
-        return
+    def _search_for_device_address(self, path, interfaces):
+        if 'org.bluez.Device1' in interfaces.keys():
+            if interfaces['org.bluez.Device1']['Address'] == self._search_key:
+                return path
+        return ''
+
+    def _search_for_device_name(self, path, interfaces):
+        if 'org.bluez.Device1' in interfaces.keys():
+            if interfaces['org.bluez.Device1']['Name'] == self._search_key:
+                return path
+        return ''
 
     @property
     def uuids(self):
@@ -141,7 +154,7 @@ class Adapter (object):
 
 
 if __name__ == '__main__':
-    hci0 = Adapter('5C:F3:70:81:D3:6C')
-    hci0.powered = True
+    hci0 = Adapter('5C:F3:70:81:D3:6C', 'Pixel', True)
     hci0.start_discovery()
+    loop.run()
     print(hci0.powered)

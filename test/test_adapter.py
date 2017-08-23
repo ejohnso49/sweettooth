@@ -40,5 +40,13 @@ class AdapterTestCase(unittest.TestCase):
         return
 
 
+# This class is used to test discovery functions of the adapter
+class AdapterDiscoveryTestCase(unittest.TestCase):
+    def setUp(self):
+        self.address = '5C:F3:70:81:D3:6C'
+        self.adapter = adapter.Adapter(self.address)
+        return
+
+
 if __name__ == '__main__':
     unittest.main()
