@@ -23,6 +23,7 @@ BLUEZ_NAME = 'org.bluez'
 SYSTEM_BUS = pydbus.SystemBus()
 loop = GLib.MainLoop()
 
+
 class Adapter (object):
     __bluez_root = SYSTEM_BUS.get(BLUEZ_NAME, '/')
 
@@ -30,11 +31,12 @@ class Adapter (object):
         self._adapter_obj = self._find_adapter(hci_address)
         self.powered = True
         self._search_key = search_key
+        self._device_path = ''
         if search_address is True:
-            self.__bluez_root.OnInterfacesAdded = self._search_for_device_address
+            self.__bluez_root.InterfacesAdded.connect(self._search_for_device_address)
             # self.__bluez_root.OnPropertiesChanged = self._search_for_device_address
         else:
-            self.__bluez_root.OnInterfacesAdded = self._search_for_device_name
+            self.__bluez_root.InterfacesAdded.connect(self._search_for_device_name)
             # self.__bluez_root.OnPropertiesChanged = self._search_for_device_name
         return
 
@@ -47,16 +49,24 @@ class Adapter (object):
         return
 
     def _search_for_device_address(self, path, interfaces):
+        print('Search for device address')
+        print(path)
+        print(interfaces)
         if 'org.bluez.Device1' in interfaces.keys():
+            print(interfaces['org.bluez.Device1']['Address'])
             if interfaces['org.bluez.Device1']['Address'] == self._search_key:
-                return path
-        return ''
+                self._device_path = path
+                loop.quit()
+        return
 
     def _search_for_device_name(self, path, interfaces):
+        print('Search for device name')
         if 'org.bluez.Device1' in interfaces.keys():
-            if interfaces['org.bluez.Device1']['Name'] == self._search_key:
-                return path
-        return ''
+            print(interfaces['org.bluez.Device1']['Alias'])
+            if interfaces['org.bluez.Device1']['Alias'] == self._search_key:
+                self._device_path = path
+                loop.quit()
+        return
 
     @property
     def uuids(self):
@@ -153,8 +163,14 @@ class Adapter (object):
         return result
 
 
+def force_timeout():
+    print('timeout hit')
+    loop.quit()
+
 if __name__ == '__main__':
-    hci0 = Adapter('5C:F3:70:81:D3:6C', 'Pixel', True)
+    GObject.timeout_add(50000, force_timeout)
+    hci0 = Adapter('5C:F3:70:81:D3:6C', '00:06:66:D8:19:81', False)
     hci0.start_discovery()
     loop.run()
-    print(hci0.powered)
+    hci0.stop_discovery()
+    print(hci0._device_path)
