@@ -1,31 +1,33 @@
 import pydbus
+import re
+from exceptions import NoAdaptersFoundException
 from gi.repository import GLib, GObject
+from time import sleep
+
 
 class RootObj(object):
     __system_bus = pydbus.SystemBus()
     __bluez_bus_name = 'org.bluez'
+    __adapter_regex_str = r"^/org/bluez/hci\d+$"
+
     def __init__(self):
         self.__dbus_obj = __class__.__system_bus.get(__class__.__bluez_bus_name, '/')
-        self.device_path_list = []
-        self.__initialize_glib_loop()
+        self.adapter_path_list = self.__find_hci_adapter_paths()    # This seems hacky, but I'm not sure why
 
-    def __initialize_glib_loop(self):
-        self.__dbus_obj.InterfacesAdded.connect(self.__add_device_to_list)
-        self.__dbus_obj.InterfacesRemoved.connect(self.__remove_device_from_list)
+    def update_hci_adapter_path_list(self):
+        self.adapter_path_list = self.__find_hci_adapter_paths()
 
-    def __add_device_to_list(self, path, interfaces):
-        if 'org.bluez.Device1' in interfaces.keys():
-                self.device_path_list.append(path)
-            return
-
-    def __remove_device_from_list(self, path, interfaces):
-        if 'org.bluez.Device1' in interfaces.keys():
-            try:
-                self.device_path_list.remove(path)
-            except ValueError:
-                pass
-        return
+    def __find_hci_adapter_paths(self):
+        result = []
+        obj_dict = self.managed_objects
+        for object_path in obj_dict.keys():
+            if re.search(__class__.__adapter_regex_str, object_path) is not None:
+                result.append(object_path)
+        if not result:
+            raise NoAdaptersFoundException()
+        return result
 
     @property
     def managed_objects(self):
         return self.__dbus_obj.GetManagedObjects()
+
