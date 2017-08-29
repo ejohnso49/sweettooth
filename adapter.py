@@ -16,56 +16,38 @@
 
 
 from gi.repository import GLib, GObject
+from exceptions import AdapterNotFoundException
+from time import sleep
+from root import RootObj
 import pydbus
 import re
 
-BLUEZ_NAME = 'org.bluez'
-SYSTEM_BUS = pydbus.SystemBus()
-loop = GLib.MainLoop()
-
 
 class Adapter (object):
-    __bluez_root = SYSTEM_BUS.get(BLUEZ_NAME, '/')
+    __bluez_bus_name = 'org.bluez'
+    __system_bus = pydbus.SystemBus()
+    __bluez_root = RootObj()
+    __discovery_timeout = 1500  # This time out is in ms
 
-    def __init__(self, hci_address, search_key, search_address=False):
+    def __init__(self, hci_address=None):
         self._adapter_obj = self._find_adapter(hci_address)
         self.powered = True
-        self._search_key = search_key
-        self._device_path = ''
-        if search_address is True:
-            self.__bluez_root.InterfacesAdded.connect(self._search_for_device_address)
-            # self.__bluez_root.OnPropertiesChanged = self._search_for_device_address
-        else:
-            self.__bluez_root.InterfacesAdded.connect(self._search_for_device_name)
-            # self.__bluez_root.OnPropertiesChanged = self._search_for_device_name
+        self.device_path_list = []
+        self._setup_glib_loop()
         return
 
+    def _setup_glib_loop(self):
+        GObject.timeout_add(__class__.__discovery_timeout, self.__timeout_handler)
+        self._loop = GLib.MainLoop()
+
     def start_discovery(self):
+        print('setting discovery on')
         self._adapter_obj.StartDiscovery()
+        self._loop.run()
         return
 
     def stop_discovery(self):
         self._adapter_obj.StopDiscovery()
-        return
-
-    def _search_for_device_address(self, path, interfaces):
-        print('Search for device address')
-        print(path)
-        print(interfaces)
-        if 'org.bluez.Device1' in interfaces.keys():
-            print(interfaces['org.bluez.Device1']['Address'])
-            if interfaces['org.bluez.Device1']['Address'] == self._search_key:
-                self._device_path = path
-                loop.quit()
-        return
-
-    def _search_for_device_name(self, path, interfaces):
-        print('Search for device name')
-        if 'org.bluez.Device1' in interfaces.keys():
-            print(interfaces['org.bluez.Device1']['Alias'])
-            if interfaces['org.bluez.Device1']['Alias'] == self._search_key:
-                self._device_path = path
-                loop.quit()
         return
 
     @property
@@ -149,28 +131,28 @@ class Adapter (object):
     @classmethod
     def _find_adapter(cls, hci_address):
         result = None
-        hci_regex = re.compile(r'.*(hci)\d$')
+        if hci_address is None:     # User didn't specify an address for HCI
+            if not cls.__bluez_root.adapter_path_list:
+                raise AdapterNotFoundException(hci_address)
+            else:   # Default to using the first entry in the adapter path list
+                result = cls.__system_bus.get(cls.__bluez_bus_name, cls.__bluez_root.adapter_path_list[0])
+        elif hci_address:
+            obj_dict = cls.__bluez_root.managed_objects
+            for path in cls.__bluez_root.adapter_path_list:
+                if obj_dict[path]['org.bluez.Adapter1']['Address'] == hci_address:
+                    result = cls.__system_bus.get(cls.__bluez_bus_name, path)
+            if result is None:
+                raise AdapterNotFoundException
 
-        obj_dict = cls.__bluez_root.GetManagedObjects()
-        # Filter only object paths with 'hci'
-        hci_dict = {key: val for (key, val) in obj_dict.items() if hci_regex.match(key)}
-        for path, hci in hci_dict.items():
-            if hci['org.bluez.Adapter1']['Address'] == hci_address:
-                result = SYSTEM_BUS.get(BLUEZ_NAME, path)
-
-        if result is None:
-            raise Exception('No HCI found with address {}'.format(hci_address))
         return result
 
+    def __timeout_handler(self):
+        print('entering timeout handler')
+        self._loop.quit()
 
-def force_timeout():
-    print('timeout hit')
-    loop.quit()
 
 if __name__ == '__main__':
-    GObject.timeout_add(50000, force_timeout)
-    hci0 = Adapter('5C:F3:70:81:D3:6C', '00:06:66:D8:19:81', False)
+    hci0 = Adapter('5C:F3:70:81:D3:6C', '00:06:66:D8:19:81', True)
     hci0.start_discovery()
-    loop.run()
     hci0.stop_discovery()
     print(hci0._device_path)
